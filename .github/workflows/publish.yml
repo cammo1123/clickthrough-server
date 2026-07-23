@@ -5,17 +5,12 @@ on:
         tags:
             - "v*.*.*" # e.g. v1.2.0 -> triggers a release build
         branches:
-            - main # every push to main gets a CI build (no publish)
+            - master
     pull_request:
-    workflow_dispatch: # lets you trigger a release manually from the Actions tab
-        inputs:
-            changelog:
-                description: "Override changelog text (optional)"
-                required: false
-                default: ""
+    workflow_dispatch:
 
 permissions:
-    contents: write # needed to create GitHub Releases
+    contents: write
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
@@ -86,6 +81,20 @@ jobs:
                   name: ${{ needs.build.outputs.jar_name }}
                   path: build/libs
 
+            - name: Generate changelog
+              id: changelog
+              run: |
+                  previous_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+                  if [ -z "$previous_tag" ]; then
+                    git log --pretty=format:"- %s" > CHANGELOG_TEMP.md
+                  else
+                    git log $previous_tag..HEAD --pretty=format:"- %s" > CHANGELOG_TEMP.md
+                  fi
+                  changelog=$(cat CHANGELOG_TEMP.md)
+                  echo "content<<EOF" >> "$GITHUB_OUTPUT"
+                  echo "$changelog" >> "$GITHUB_OUTPUT"
+                  echo "EOF" >> "$GITHUB_OUTPUT"
+
             - name: Publish mod
               uses: Kir-Antipov/mc-publish@v3.3
               with:
@@ -104,5 +113,5 @@ jobs:
                   name: "${{ github.event.repository.name }} ${{ github.ref_name }}"
                   version: ${{ github.ref_name }}
                   version-type: ${{ contains(github.ref_name, 'alpha') && 'alpha' || (contains(github.ref_name, 'beta') && 'beta' || 'release') }}
-                  changelog: ${{ github.event.inputs.changelog }}
+                  changelog: ${{ steps.changelog.outputs.content }}
                   loaders: fabric
