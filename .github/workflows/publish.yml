@@ -103,6 +103,6 @@ jobs:
                   files: build/libs/${{ needs.build.outputs.jar_name }}
                   name: "${{ github.event.repository.name }} ${{ github.ref_name }}"
                   version: ${{ github.ref_name }}
-                  version-type: release
+                  version-type: ${{ contains(github.ref_name, 'alpha') && 'alpha' || (contains(github.ref_name, 'beta') && 'beta' || 'release') }}
                   changelog: ${{ github.event.inputs.changelog }}
                   loaders: fabric
