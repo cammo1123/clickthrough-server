@@ -5,6 +5,9 @@ Right-clicking a wall sign, item frame, glow item frame, or painting opens
 the container mounted directly behind it, completely compatible with vanilla
 clients.
 
+It also allows for individual players to disable it, with the command 
+`/clickthrough [enable|disable]`
+
 ## Behaviour
 
 This is configurable per entity type in `config/clickthrough-server/config.json`
