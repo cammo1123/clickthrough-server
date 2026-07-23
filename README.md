@@ -7,7 +7,7 @@ clients.
 
 ## Behaviour
 
-This is configurable per entity type in `config/clickthrough-server/config.json"`
+This is configurable per entity type in `config/clickthrough-server/config.json`
 
 ```json
 {

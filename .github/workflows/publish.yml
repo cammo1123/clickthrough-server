@@ -1,0 +1,108 @@
+name: Build & Publish
+
+on:
+    push:
+        tags:
+            - "v*.*.*" # e.g. v1.2.0 -> triggers a release build
+        branches:
+            - main # every push to main gets a CI build (no publish)
+    pull_request:
+    workflow_dispatch: # lets you trigger a release manually from the Actions tab
+        inputs:
+            changelog:
+                description: "Override changelog text (optional)"
+                required: false
+                default: ""
+
+permissions:
+    contents: write # needed to create GitHub Releases
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        name: Build
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Set up JDK 25
+              uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: 25
+
+            - name: Set up Gradle
+              uses: gradle/actions/setup-gradle@v4
+              with:
+                  cache-read-only: ${{ github.ref_type != 'tag' }}
+
+            - name: Grant execute permission for gradlew
+              run: chmod +x gradlew
+
+            - name: Build
+              run: ./gradlew build --no-daemon
+
+            - name: Run tests
+              run: ./gradlew test --no-daemon
+
+            - name: Locate build artifact
+              id: jar
+              run: |
+                  jar_path=$(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' | head -n 1)
+                  if [ -z "$jar_path" ]; then
+                    echo "::error::No output jar found in build/libs"
+                    exit 1
+                  fi
+                  echo "path=$jar_path" >> "$GITHUB_OUTPUT"
+                  echo "name=$(basename "$jar_path")" >> "$GITHUB_OUTPUT"
+
+            - name: Upload build artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ steps.jar.outputs.name }}
+                  path: ${{ steps.jar.outputs.path }}
+                  if-no-files-found: error
+
+        outputs:
+            jar_path: ${{ steps.jar.outputs.path }}
+            jar_name: ${{ steps.jar.outputs.name }}
+
+    publish:
+        name: Publish release
+        needs: build
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Download build artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: ${{ needs.build.outputs.jar_name }}
+                  path: build/libs
+
+            - name: Publish mod
+              uses: Kir-Antipov/mc-publish@v3.3
+              with:
+                  # --- Modrinth ---
+                  modrinth-id: ${{ vars.MODRINTH_PROJECT_ID }}
+                  modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+                  modrinth-featured: true
+
+                  # --- GitHub Releases ---
+                  github-tag: ${{ github.ref_name }}
+                  github-generate-changelog: ${{ github.event.inputs.changelog == '' }}
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
+                  # --- Shared metadata ---
+                  files: build/libs/${{ needs.build.outputs.jar_name }}
+                  name: "${{ github.event.repository.name }} ${{ github.ref_name }}"
+                  version: ${{ github.ref_name }}
+                  version-type: release
+                  changelog: ${{ github.event.inputs.changelog }}
+                  loaders: fabric
