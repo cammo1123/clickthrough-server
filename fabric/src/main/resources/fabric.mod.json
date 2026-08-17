@@ -1,6 +1,6 @@
 {
 	"schemaVersion": 1,
-	"id": "clickthrough-server",
+	"id": "clickthrough_server",
 	"version": "${version}",
 	"name": "ClickThrough Server",
 	"description": "Click through Signs and Item Frames to Chests and other containers - a server side recreation of ClickThrough+.",
@@ -9,7 +9,7 @@
 	"license": "MIT",
 	"environment": "*",
 	"entrypoints": {
-		"main": ["dev.cammo1123.clickthrough.ClickThroughServer"]
+		"main": ["dev.cammo1123.clickthrough.fabric.ClickThroughServerFabric"]
 	},
 	"mixins": [],
 	"depends": {

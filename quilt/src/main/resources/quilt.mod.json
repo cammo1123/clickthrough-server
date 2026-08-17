@@ -1,0 +1,31 @@
+{
+	"schema_version": 1,
+	"quilt_loader": {
+		"group": "${group}",
+		"id": "clickthrough_server",
+		"version": "${version}",
+		"metadata": {
+			"name": "ClickThrough Server",
+			"description": "Click through Signs and Item Frames to Chests and other containers - a server side recreation of ClickThrough+.",
+			"contributors": {
+				"Cameron Youell": "Owner"
+			},
+			"license": "MIT"
+		},
+		"intermediate_mappings": "net.fabricmc:intermediary",
+		"entrypoints": {
+			"main": "dev.cammo1123.clickthrough.quilt.ClickThroughServerQuilt"
+		},
+		"depends": [
+			{
+				"id": "quilt_loader",
+				"versions": ">=0.30.0"
+			},
+			{
+				"id": "minecraft",
+				"versions": "26.2"
+			}
+		]
+	},
+	"mixin": "clickthrough_server.quilt.mixins.json"
+}

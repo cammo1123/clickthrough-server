@@ -1,0 +1,23 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+repositories {
+	maven {
+		name = 'Quilt'
+		url = 'https://maven.quiltmc.org/repository/release/'
+	}
+}
+
+base {
+	archivesName = project.base_name + '-quilt'
+}
+
+dependencies {
+	implementation project(':common')
+
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "org.quiltmc:quilt-loader:${project.quilt_loader_version}"
+}

@@ -1,0 +1,22 @@
+plugins {
+	id 'net.neoforged.moddev' version "${moddevgradle_version}"
+	id 'maven-publish'
+}
+
+base {
+	archivesName = project.base_name + '-neoforge'
+}
+
+neoForge {
+	version = project.neoforge_version
+
+	mods {
+		register("clickthrough_server") {
+			sourceSet(sourceSets.main)
+		}
+	}
+}
+
+dependencies {
+	implementation project(':common')
+}

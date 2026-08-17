@@ -1,13 +1,16 @@
 name: Build & Publish
 
 on:
-    push:
-        tags:
-            - "v*.*.*" # e.g. v1.2.0 -> triggers a release build
-        branches:
-            - master
-    pull_request:
     workflow_dispatch:
+        inputs:
+            version:
+                description: Release tag to publish, for example v0.0.3
+                required: true
+                type: string
+            changelog:
+                description: Release notes to publish
+                required: true
+                type: string
 
 permissions:
     contents: write
@@ -41,60 +44,86 @@ jobs:
             - name: Build
               run: ./gradlew build --no-daemon
 
-            - name: Run tests
-              run: ./gradlew test --no-daemon
-
-            - name: Locate build artifact
-              id: jar
+            - name: Stage build artifacts
+              id: jars
               run: |
-                  jar_path=$(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' | head -n 1)
-                  if [ -z "$jar_path" ]; then
-                    echo "::error::No output jar found in build/libs"
+                  mkdir -p dist
+                  # Collect every built jar that carries a loader metadata file.
+                  # A new loader module (e.g. quilt) is picked up automatically.
+                  for jar in $(find . -type f -path '*/build/libs/*.jar' \
+                      ! -name '*-sources.jar' ! -name '*-dev.jar'); do
+                      if unzip -l "$jar" 2>/dev/null | grep -qE \
+                          'fabric\.mod\.json|quilt\.mod\.json|META-INF/((neo)?forge\.mods\.toml|mods\.toml)'; then
+                          cp "$jar" dist/
+                      fi
+                  done
+                  ls -la dist
+
+                  # Map each jar to its loader id. Jar names come from the
+                  # per-module Gradle archivesName (base_name + module), so map
+                  # explicitly to keep loader ids stable even if a module name
+                  # contains hyphens.
+                  loaders=""
+                  for jar in $(find dist -maxdepth 1 -type f -name 'clickthrough_server-*.jar'); do
+                      case "$jar" in
+                          *-fabric-*)   loader="fabric" ;;
+                          *-neoforge-*) loader="neoforge" ;;
+                          *-forge-*)    loader="forge" ;;
+                          *-quilt-*)    loader="quilt" ;;
+                          *)
+                              echo "::error::Unrecognized loader in jar name: $jar"
+                              exit 1
+                              ;;
+                      esac
+                      loaders="$loaders,\"$loader\""
+                  done
+
+                  if [ -z "$loaders" ]; then
+                    echo "::error::No publishable loader jars found"
                     exit 1
                   fi
-                  echo "path=$jar_path" >> "$GITHUB_OUTPUT"
-                  echo "name=$(basename "$jar_path")" >> "$GITHUB_OUTPUT"
 
-            - name: Upload build artifact
+                  loaders_json="[${loaders#?}]"
+                  echo "loaders=$loaders_json" >> "$GITHUB_OUTPUT"
+                  echo "Detected loaders: $loaders_json"
+
+            - name: Upload build artifacts
               uses: actions/upload-artifact@v4
               with:
-                  name: ${{ steps.jar.outputs.name }}
-                  path: ${{ steps.jar.outputs.path }}
+                  name: clickthrough_server-jars
+                  path: dist
                   if-no-files-found: error
 
         outputs:
-            jar_path: ${{ steps.jar.outputs.path }}
-            jar_name: ${{ steps.jar.outputs.name }}
+            loaders: ${{ steps.jars.outputs.loaders }}
 
     publish:
-        name: Publish release
+        name: Publish ${{ matrix.loader }}
         needs: build
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         runs-on: ubuntu-latest
+        strategy:
+            # Serialize the matrix: every loader publishes into the same GitHub
+            # release for a tag, so concurrent runs would race on that release.
+            max-parallel: 1
+            matrix:
+                loader: ${{ fromJson(needs.build.outputs.loaders) }}
         steps:
             - name: Checkout
               uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0 # Required for changelog
 
-            - name: Download build artifact
+            - name: Download build artifacts
               uses: actions/download-artifact@v4
               with:
-                  name: ${{ needs.build.outputs.jar_name }}
-                  path: build/libs
+                  name: clickthrough_server-jars
+                  path: dist
 
-            - name: Generate changelog
-              id: changelog
+            - name: Use manual changelog
+              id: manual_changelog
+              env:
+                  CHANGELOG: ${{ inputs.changelog }}
               run: |
-                  previous_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-                  if [ -z "$previous_tag" ]; then
-                    git log --pretty=format:"- %s" > CHANGELOG_TEMP.md
-                  else
-                    git log $previous_tag..HEAD --pretty=format:"- %s" > CHANGELOG_TEMP.md
-                  fi
-                  changelog=$(cat CHANGELOG_TEMP.md)
                   echo "content<<EOF" >> "$GITHUB_OUTPUT"
-                  echo "$changelog" >> "$GITHUB_OUTPUT"
+                  printf '%s\n' "$CHANGELOG" >> "$GITHUB_OUTPUT"
                   echo "EOF" >> "$GITHUB_OUTPUT"
 
             - name: Publish mod
@@ -106,14 +135,16 @@ jobs:
                   modrinth-featured: true
 
                   # --- GitHub Releases ---
-                  github-tag: ${{ github.ref_name }}
+                  github-tag: ${{ inputs.version || github.ref_name }}
                   github-generate-changelog: false
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
                   # --- Shared metadata ---
-                  files: build/libs/${{ needs.build.outputs.jar_name }}
-                  name: "${{ github.event.repository.name }} ${{ github.ref_name }}"
-                  version: ${{ github.ref_name }}
-                  version-type: ${{ contains(github.ref_name, 'alpha') && 'alpha' || (contains(github.ref_name, 'beta') && 'beta' || 'release') }}
-                  changelog: ${{ steps.changelog.outputs.content }}
-                  loaders: fabric
+                  # Loaders, game versions and dependencies are read from the
+                  # jar's own metadata (fabric.mod.json / neoforge.mods.toml),
+                  # so MC or loader bumps need no workflow changes.
+                  files: dist/clickthrough_server-${{ matrix.loader }}-*.jar
+                  name: "${{ github.event.repository.name }} ${{ inputs.version || github.ref_name }}"
+                  version: ${{ inputs.version || github.ref_name }}
+                  version-type: ${{ contains(inputs.version || github.ref_name, 'alpha') && 'alpha' || (contains(inputs.version || github.ref_name, 'beta') && 'beta' || 'release') }}
+                  changelog: ${{ steps.manual_changelog.outputs.content }}

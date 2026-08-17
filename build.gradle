@@ -1,56 +1,62 @@
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
-	id 'maven-publish'
+	id 'base'
 }
 
-version = project.version
 group = project.maven_group
+version = project.version
 
-base {
-	archivesName = project.base_name
-}
+subprojects {
+	group = rootProject.group
+	version = rootProject.version
 
-repositories {
+	plugins.withId('java') {
+		java {
+			sourceCompatibility = JavaVersion.VERSION_25
+			targetCompatibility = JavaVersion.VERSION_25
+		}
 
-}
+		tasks.withType(JavaCompile).configureEach {
+			it.options.release = 25
+		}
 
-dependencies {
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-}
-
-processResources {
-	def version = project.version
-	inputs.property "version", version
-
-	filesMatching("fabric.mod.json") {
-		expand "version": version
+		processResources {
+			inputs.property "version", project.version
+			inputs.property "group", project.group
+			filesMatching("fabric.mod.json") {
+				expand "version": project.version
+			}
+			filesMatching("quilt.mod.json") {
+				expand "version": project.version, "group": project.group
+			}
+			filesMatching("META-INF/neoforge.mods.toml") {
+				expand "version": project.version
+			}
+		}
 	}
-}
 
-tasks.withType(JavaCompile).configureEach {
-	it.options.release = 25
-}
+	plugins.withId('maven-publish') {
+		jar {
+			from(project(':common').sourceSets.main.output)
+			from(rootProject.file('LICENSE')) {
+				rename { "${it}_${project.base_name}" }
+			}
+		}
 
-java {
-	withSourcesJar()
+		java {
+			withSourcesJar()
+		}
 
-	sourceCompatibility = JavaVersion.VERSION_25
-	targetCompatibility = JavaVersion.VERSION_25
-}
+		sourcesJar {
+			from(project(':common').sourceSets.main.allSource)
+		}
 
-jar {
-	from("LICENSE") {
-		rename { "${it}_${project.base_name}" }
-	}
-}
-
-publishing {
-	publications {
-		create("mavenJava", MavenPublication) {
-			artifactId = project.base_name
-			from components.java
+		publishing {
+			publications {
+				create('mavenJava', MavenPublication) {
+					artifactId = "${project.base_name}-${project.name}"
+					from components.java
+				}
+			}
 		}
 	}
 }
