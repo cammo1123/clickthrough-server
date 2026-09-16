@@ -162,9 +162,9 @@ jobs:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
                   # --- Shared metadata ---
-                  # Loaders, game versions and dependencies are read from the
-                  # jar's own metadata (fabric.mod.json / neoforge.mods.toml),
-                  # so MC or loader bumps need no workflow changes.
+                  # The publisher requires the game version explicitly;
+                  # loaders and dependencies are read from the jar metadata.
+                  game-versions: ${{ inputs.minecraft_profile }}
                   files: dist/clickthrough_server-${{ matrix.loader }}-*.jar
                   name: "${{ github.event.repository.name }} ${{ inputs.version || github.ref_name }}"
                   version: ${{ inputs.version || github.ref_name }}
