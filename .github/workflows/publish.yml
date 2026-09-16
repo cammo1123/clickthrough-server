@@ -11,6 +11,10 @@ on:
                 description: Release notes to publish
                 required: true
                 type: string
+            minecraft_profile:
+                description: Minecraft build profile from gradle/versions
+                required: true
+                type: string
 
 permissions:
     contents: write
@@ -41,8 +45,26 @@ jobs:
             - name: Grant execute permission for gradlew
               run: chmod +x gradlew
 
+            - name: Validate Minecraft profiles
+              env:
+                  MINECRAFT_PROFILE: ${{ inputs.minecraft_profile }}
+              run: |
+                  case "$MINECRAFT_PROFILE" in
+                      ''|*[!A-Za-z0-9._-]*)
+                          echo "::error::Invalid Minecraft profile: $MINECRAFT_PROFILE"
+                          exit 1
+                          ;;
+                  esac
+                  if [ ! -f "gradle/versions/$MINECRAFT_PROFILE.properties" ]; then
+                      echo "::error::Unknown Minecraft profile: $MINECRAFT_PROFILE"
+                      exit 1
+                  fi
+                  ./gradlew validateProfiles --no-daemon -Pmc_target="$MINECRAFT_PROFILE"
+
             - name: Build
-              run: ./gradlew build --no-daemon
+              env:
+                  MINECRAFT_PROFILE: ${{ inputs.minecraft_profile }}
+              run: ./gradlew build --no-daemon -Pmc_target="$MINECRAFT_PROFILE"
 
             - name: Stage build artifacts
               id: jars

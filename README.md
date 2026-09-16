@@ -44,6 +44,23 @@ Each mode accepts one of:
 ./gradlew build
 ```
 
+The Minecraft version is selected through a profile in `gradle/versions/`.
+Use `-Pmc_target` to select a profile explicitly:
+
+```
+./gradlew build -Pmc_target="26.2"
+```
+
+Profiles define the Minecraft version, loader versions, dependency ranges, and
+the loaders included in the build. Validate every profile with:
+
+```
+./gradlew validateProfiles
+```
+
+The release workflow requires the profile name as its `minecraft_profile`
+input and validates that the corresponding profile exists before building.
+
 The built jars will be in `build/libs/` under `fabric/`, `neoforge/` and
 `quilt/`. Drop the one matching your server's loader into your server's `mods/`
 folder alongside the compatible loader/API:

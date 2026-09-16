@@ -12,13 +12,13 @@ authors = "Cameron Youell"
 [[dependencies.clickthrough_server]]
 modId = "neoforge"
 type = "required"
-versionRange = "[26.2,)"
+versionRange = "${neoforge_dependency_range}"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.clickthrough_server]]
 modId = "minecraft"
 type = "required"
-versionRange = "[26.2]"
+versionRange = "${minecraft_dependency_range}"
 ordering = "NONE"
 side = "BOTH"

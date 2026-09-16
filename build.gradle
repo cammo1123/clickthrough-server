@@ -22,19 +22,40 @@ subprojects {
 		processResources {
 			inputs.property "version", project.version
 			inputs.property "group", project.group
-			filesMatching("fabric.mod.json") {
-				expand "version": project.version
+			inputs.property "minecraft_supported_versions", project.minecraft_supported_versions
+			inputs.property "minecraft_dependency_range", project.minecraft_dependency_range
+			if (project.findProperty('loader_version')) {
+				inputs.property "loader_version", project.loader_version
+				filesMatching("fabric.mod.json") {
+					expand "version": project.version,
+						"minecraft_supported_versions": project.minecraft_supported_versions,
+						"loader_version": project.loader_version
+				}
 			}
-			filesMatching("quilt.mod.json") {
-				expand "version": project.version, "group": project.group
+			if (project.findProperty('quilt_loader_version')) {
+				inputs.property "quilt_loader_version", project.quilt_loader_version
+				filesMatching("quilt.mod.json") {
+					expand "version": project.version,
+						"group": project.group,
+						"minecraft_supported_versions": project.minecraft_supported_versions,
+						"quilt_loader_version": project.quilt_loader_version
+				}
 			}
 			filesMatching("META-INF/neoforge.mods.toml") {
-				expand "version": project.version
+				expand "version": project.version,
+					"minecraft_dependency_range": project.minecraft_dependency_range,
+					"neoforge_dependency_range": project.neoforge_dependency_range
 			}
 		}
 	}
 
 	plugins.withId('maven-publish') {
+		tasks.withType(org.gradle.api.tasks.bundling.AbstractArchiveTask).configureEach {
+			archiveFileName = providers.provider {
+				"${archiveBaseName.get()}-${archiveVersion.get()}-${project.minecraft_version}.${archiveExtension.get()}"
+			}
+		}
+
 		jar {
 			from(project(':common').sourceSets.main.output)
 			from(rootProject.file('LICENSE')) {

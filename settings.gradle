@@ -21,4 +21,94 @@ pluginManagement {
 	}
 }
 
-include 'common', 'fabric', 'neoforge', 'quilt'
+def knownLoaders = ['fabric', 'neoforge', 'quilt'] as Set
+def requiredProperties = [
+	'minecraft_version',
+	'minecraft_supported_versions',
+	'minecraft_dependency_range',
+	'loom_version',
+	'target_loaders'
+]
+def loaderProperties = [
+	fabric: ['loader_version', 'fabric_api_version'],
+	neoforge: ['neoforge_version', 'neoforge_dependency_range', 'moddevgradle_version'],
+	quilt: ['loader_version', 'quilt_loader_version']
+]
+
+def loadProfile = { File path ->
+	def loaded = new Properties()
+	path.withInputStream { loaded.load(it) }
+	loaded
+}
+
+def validateProfile = { File path, Properties profile ->
+	def missing = requiredProperties.findAll { !profile.getProperty(it)?.trim() }
+	if (!missing.isEmpty()) {
+		throw new GradleException("Profile '${path.name}' is missing required properties: ${missing.join(', ')}")
+	}
+
+	def targetLoaders = profile.getProperty('target_loaders')
+		.split(',')
+		.collect { it.trim() }
+		.findAll { it }
+	if (targetLoaders.isEmpty()) {
+		throw new GradleException("Profile '${path.name}' must enable at least one loader")
+	}
+	def unknownLoaders = targetLoaders.findAll { !knownLoaders.contains(it) }.unique()
+	if (!unknownLoaders.isEmpty()) {
+		throw new GradleException("Profile '${path.name}' contains unknown loaders: ${unknownLoaders.join(', ')}")
+	}
+
+	def missingLoaderProperties = targetLoaders.collectMany { loader ->
+		loaderProperties[loader].findAll { !profile.getProperty(it)?.trim() }
+			.collect { "${loader}.${it}" }
+	}
+	if (!missingLoaderProperties.isEmpty()) {
+		throw new GradleException("Profile '${path.name}' is missing loader properties: ${missingLoaderProperties.join(', ')}")
+	}
+	[targetLoaders: targetLoaders]
+}
+
+def mcTarget = providers.gradleProperty('mc_target').get()
+if (!(mcTarget ==~ /[A-Za-z0-9._-]+/)) {
+	throw new GradleException("Invalid Minecraft profile '${mcTarget}'")
+}
+def profilePath = file("gradle/versions/${mcTarget}.properties")
+if (!profilePath.isFile()) {
+	throw new GradleException("Unknown Minecraft profile '${mcTarget}'. Available profiles are in gradle/versions/")
+}
+
+def profile = loadProfile(profilePath)
+def selectedProfile = validateProfile(profilePath, profile)
+
+gradle.beforeProject { project ->
+	profile.each { key, value ->
+		project.ext.set(key.toString(), value.toString())
+	}
+}
+
+gradle.rootProject { rootProject ->
+	rootProject.tasks.register('validateProfiles') {
+		group = 'verification'
+		description = 'Validate every Minecraft version profile'
+		doLast {
+			def profileFiles = file('gradle/versions').listFiles()?.findAll {
+				it.isFile() && it.name.endsWith('.properties')
+			} ?: []
+			if (profileFiles.isEmpty()) {
+				throw new GradleException('No Minecraft profiles found in gradle/versions/')
+			}
+			profileFiles.each { candidate ->
+				validateProfile(candidate, loadProfile(candidate))
+			}
+			println "Validated ${profileFiles.size()} Minecraft profile(s)"
+		}
+	}
+}
+
+include 'common'
+selectedProfile.targetLoaders.each { loader ->
+	if (loader != 'common') {
+		include loader
+	}
+}
